@@ -5,7 +5,7 @@ clear
 echo "==========================================================="
 echo "===             install dependencies                    ==="
 echo "==========================================================="
-apt install -yf python-matplotlib python-pip python-tk ipython cython mercurial
+apt install -yf python-matplotlib python-pip python-tk ipython cython mercurial software-properties-common coinor-libipopt-dev
 pip install krylov --force
 echo "==========================================================="
 echo "===                     success                         ==="
