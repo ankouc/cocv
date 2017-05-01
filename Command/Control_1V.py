@@ -7,11 +7,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def boundary1_U(x, on_boundary):
+def boundary_U(x, on_boundary):
     tol = 1E-14
     return on_boundary and near(x[0], 1.0, tol)
 
-def boundary1_L(x, on_boundary):
+def boundary_L(x, on_boundary):
     tol = 1E-14
     return on_boundary and near(x[0], 0.0, tol)
 
@@ -20,8 +20,9 @@ class Optimal_command(object):
 
     def __init__(self, state_func, solver, bcs, objective, f0, n_vertice=20):
         self.bc_u1 = bcs['bc_u1']
+        self.bc_f = bcs['bc_f']
         self.f0 = f0
-        self.state_func1 = state_func[0]
+        self.state_func1 = state_func
         self.n = 50
         self.objective = objective
         self.solver = solver
@@ -29,11 +30,10 @@ class Optimal_command(object):
 
     def make_function_space(self):
         mesh_state = UnitIntervalMesh(self.n)
+        self.mesh_state = mesh_state
         self.W = FunctionSpace(mesh_state, "DG", 0)
         self.V1 = FunctionSpace(mesh_state, "CG", 1)
 
-
-        x = SpatialCoordinate(mesh_state)
 
         self.f = interpolate(Expression(self.f0, degree=1), self.W, name='Control')
         self.u1 = Function(self.V1, name='State1')
@@ -44,15 +44,24 @@ class Optimal_command(object):
     def make_boundaries(self, space):
         
         self.bc1 = []
+        self.bcf = []
 
 
         if self.bc_u1['lower'] is not None:
-            bc1_l = DirichletBC(space[0], self.bc_u1['lower'], boundary1_L)         
+            bc1_l = DirichletBC(space[0], self.bc_u1['lower'], boundary_L)         
             self.bc1.append(bc1_l)
 
         if self.bc_u1['upper'] is not None:
-            bc1_u = DirichletBC(space[0], self.bc_u1['upper'], boundary1_U)
+            bc1_u = DirichletBC(space[0], self.bc_u1['upper'], boundary_U)
             self.bc1.append(bc1_u)
+
+        if self.bc_f['lower'] is not None:
+            bcf_l = DirichletBC(space[1], self.bc_f['lower'], boundary_L)         
+            self.bcf.append(bcf_l)
+
+        if self.bc_f['upper'] is not None:
+            bcf_u = DirichletBC(space[1], self.bc_f['upper'], boundary_U)
+            self.bcf.append(bcf_u)
  
 
 
@@ -69,7 +78,7 @@ class Optimal_command(object):
             solver = moola.BFGS(problem, f_moola, options={'gtol': 1E-15,
                                                            'Hinit': "default",
                                                            'jtol': 1E-15,
-                                                           'maxiter': 150})
+                                                           'maxiter': 30})
         else:
             raise NameError('No other solver implemented yet!') 
 
@@ -78,11 +87,32 @@ class Optimal_command(object):
         return solution 
 
     def condition_string(self):
+        print(self.bc1)
 
         if self.bc1 is not None:
             self.str_cond1 = 'self.bc1'
         else:
             self.str_cond1 = ''
+
+        if self.bcf is not None:
+            self.str_condf = 'self.bcf'
+        else:
+            self.str_condf = ''
+
+
+    def declare_state_func(self, m):
+
+        if m == 1:
+            F_1 = eval(self.state_func1)*dx
+        else:
+            F_1 = eval(self.state_func1.replace('self.f', 'self.f_opt'))*dx
+            
+        solve(F_1 == 0, self.u1, eval(self.str_cond1))
+
+
+        if m == 1 and self.str_condf is not '':
+            solve((self.w-self.w)*dx == 0, self.f, eval(self.str_condf))
+
 
 
     def main(self):
@@ -94,12 +124,11 @@ class Optimal_command(object):
 
         self.condition_string()
 
-        F = (inner(grad(self.u1), grad(self.v1))-self.v1*self.f)*dx
-        target = Expression("x[0]",degree=1)
+        self.declare_state_func(1)
 
-        solve((inner(grad(self.u1), grad(self.v1))-self.v1*self.f)*dx == 0, self.u1, eval(self.str_cond1))
+        x = SpatialCoordinate(self.mesh_state)
 
-        J = Functional((1+self.f**2)**(0.5)*dx)
+        J = Functional(eval(self.objective))
         control = Control(self.f)
 
         rf = ReducedFunctional(J, control)
@@ -107,22 +136,12 @@ class Optimal_command(object):
         
         solution = self.solve_pb(problem)
 
-
-
         self.f_opt = solution['control'].data
-        F_opt = (inner(grad(self.u1), grad(self.v1))-self.v1*self.f_opt)*dx
 
-        solve(F_opt == 0, self.u1, eval(self.str_cond1))
+        self.declare_state_func(2)
 
         self.extract_values()
         self.make_plots()
-
-
-
-
-
-
-
 
 
 

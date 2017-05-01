@@ -39,6 +39,7 @@ class Optimal_command(object):
 
 
     def make_function_space(self):
+
         mesh_state = UnitIntervalMesh(self.n)
         self.W = FunctionSpace(mesh_state, "DG", 0)
         self.V1 = FunctionSpace(mesh_state, "CG", 1)
@@ -104,13 +105,13 @@ class Optimal_command(object):
 
     def make_plots(self):
         plt.subplot(2,2,1)
-        plt.plot(self.x_array, self.f_array)
+        plt.plot(self.x_array, self.f_array**2)
         plt.title('Intial command')
         plt.grid()
 
 
         plt.subplot(2,2,2)
-        plt.plot(self.x_array, self.f_opt_array)
+        plt.plot(self.x_array, self.f_opt_array**2)
         plt.title('Optimal command')
         plt.grid()
 
@@ -142,7 +143,7 @@ class Optimal_command(object):
             solver = moola.BFGS(problem, f_moola, options={'gtol': 1E-15,
                                                            'Hinit': "default",
                                                            'jtol': 1E-15,
-                                                           'maxiter': 100})
+                                                           'maxiter': 50})
         else:
             raise NameError('No other solver implemented yet!') 
 
@@ -166,6 +167,24 @@ class Optimal_command(object):
         else:
             self.str_condf = ''
 
+    def declare_state_func(self, m):
+
+        if m == 1:
+
+            F_1 = eval(self.state_func1)*dx
+            F_2 = eval(self.state_func2)*dx
+
+        else:
+
+            F_1 = eval(self.state_func1.replace('self.f', 'self.f_opt'))*dx
+            F_2 = eval(self.state_func2.replace('self.f', 'self.f_opt'))*dx
+
+        solve(F_1 == 0, self.u1, eval(self.str_cond1))
+        solve(F_2 == 0, self.u2, eval(self.str_cond2))
+
+        if m == 1:
+            solve((self.w-self.w)*dx == 0, self.f, eval(self.str_condf))
+
     def main(self):
 
 	
@@ -175,11 +194,7 @@ class Optimal_command(object):
 
         self.condition_string()
 
-        F = (inner(grad(self.u1), grad(self.v1))-self.v1*self.f)*dx
-
-        solve(F == 0, self.u1,eval(self.str_cond1))
-        solve(eval(self.state_func2)*dx == 0, self.u2, eval(self.str_cond2))
-        solve((self.w-self.w)*dx == 0, self.f, eval(self.str_condf))
+        self.declare_state_func(1)        
 
         J = Functional(eval(self.objective))
         control = Control(self.f)
@@ -192,10 +207,8 @@ class Optimal_command(object):
 
 
         self.f_opt = solution['control'].data
-        F_opt = (inner(grad(self.u1), grad(self.v1))-self.v1*self.f_opt)*dx
 
-        solve(F_opt == 0, self.u1, eval(self.str_cond1))
-        solve(eval(self.state_func2.replace('self.f', 'self.f_opt'))*dx == 0, self.u2, eval(self.str_cond2))
+        self.declare_state_func(2)
 
         self.extract_values()
         self.make_plots()
@@ -205,11 +218,12 @@ class Optimal_command(object):
 
 
 
+'''
 
 
 
 
-
+'''
 
 
 
